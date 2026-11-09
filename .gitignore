@@ -5,3 +5,5 @@ run.log
 report*.json
 fills*.jsonl
 .v3-sandbox-test.*/
+e[0-9]*.json
+e[0-9]*.txt
