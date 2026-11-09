@@ -1,34 +1,19 @@
-"""Wednesday policy-window impulse continuation in 10-year Treasury futures."""
+"""Treasury auction-window pre-auction impulse continuation."""
 import numpy as np
 import pandas as pd
-
-FAMILY = "rates-wednesday-policy-reaction"
-PARAMS = {"observe_start": 42600, "entry": 43800, "exit": 53100, "move_ticks": 4}
-
-
+FAMILY = "rates-auction-impulse-follow"
+PARAMS = {"observe_start": 42600, "entry": 43200, "exit": 46800, "move_ticks": 2}
 def signals(panel):
     out = {s: np.zeros(len(d), dtype=np.int64) for s, d in panel.items()}
-    if "ZN" not in panel:
-        return out
-    d = panel["ZN"]
-    sec, sessions, closes = d.ct_sec.to_numpy(), d.session.to_numpy(), d.close.to_numpy()
-    target = np.zeros(len(d), dtype=np.int64)
-    i = 0
-    while i < len(d):
-        j = i + 1
-        while j < len(d) and sessions[j] == sessions[i]:
-            j += 1
-        if pd.Timestamp(sessions[i]).weekday() == 2:
-            obs = np.flatnonzero((sec[i:j] >= PARAMS["observe_start"]) & (sec[i:j] < PARAMS["entry"])) + i
-            trade = np.flatnonzero((sec[i:j] >= PARAMS["entry"]) & (sec[i:j] < PARAMS["exit"])) + i
-            if len(obs) and len(trade):
-                change = closes[obs[-1]] - closes[obs[0]]
-                if abs(change) >= PARAMS["move_ticks"] / 64:
-                    target[trade] = 1 if change > 0 else -1
-        i = j
-    out["ZN"] = target
+    if "ZN" not in panel: return out
+    d = panel["ZN"]; sec=d.ct_sec.to_numpy(); session=d.session.astype(str).to_numpy(); close=d.close.to_numpy(); target=out["ZN"]
+    for day in np.unique(session):
+        ix=np.flatnonzero(session == day)
+        if pd.Timestamp(day).weekday() not in (1,2,3): continue
+        obs=ix[(sec[ix] >= PARAMS["observe_start"]) & (sec[ix] < PARAMS["entry"])]
+        trade=ix[(sec[ix] >= PARAMS["entry"]) & (sec[ix] < PARAMS["exit"])]
+        if len(obs) and len(trade):
+            move=close[obs[-1]]-close[obs[0]]
+            if abs(move) >= PARAMS["move_ticks"] / 64: target[trade]=1 if move > 0 else -1
     return out
-
-
-def entry_risk(panel):
-    return {s: np.full(len(d), 300.0) for s, d in panel.items()}
+def entry_risk(panel): return {s: np.full(len(d), 300.0) for s,d in panel.items()}
