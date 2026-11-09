@@ -1,36 +1,32 @@
-"""Fade prior completed RTH return after delayed open, only after above-median prior range."""
+"""Wednesday policy-window impulse continuation in 10-year Treasury futures."""
 import numpy as np
+import pandas as pd
 
-FAMILY = "index-prior-day-reversal"
-PARAMS = {"rth_start": 30600, "rth_end": 54000, "entry": 34200, "exit": 53400, "range_days": 20}
+FAMILY = "rates-wednesday-policy-reaction"
+PARAMS = {"observe_start": 42600, "entry": 43800, "exit": 53100, "move_ticks": 4}
 
 
 def signals(panel):
     out = {s: np.zeros(len(d), dtype=np.int64) for s, d in panel.items()}
-    if "NQ" not in panel:
+    if "ZN" not in panel:
         return out
-    d = panel["NQ"]
-    sec = d.ct_sec.to_numpy()
-    session = d.session.astype(str).to_numpy()
-    close = d.close.to_numpy()
+    d = panel["ZN"]
+    sec, sessions, closes = d.ct_sec.to_numpy(), d.session.to_numpy(), d.close.to_numpy()
     target = np.zeros(len(d), dtype=np.int64)
-    history = []
     i = 0
     while i < len(d):
         j = i + 1
-        while j < len(d) and session[j] == session[i]:
+        while j < len(d) and sessions[j] == sessions[i]:
             j += 1
-        rth = np.flatnonzero((sec[i:j] >= PARAMS["rth_start"]) & (sec[i:j] < PARAMS["rth_end"])) + i
-        if len(rth):
-            op, cl = close[rth[0]], close[rth[-1]]
-            rng = close[rth].max() - close[rth].min()
-            if history and rng >= np.median(history[-PARAMS["range_days"]:]):
-                side = -1 if cl > op else 1
-                trade = np.flatnonzero((sec[i:j] >= PARAMS["entry"]) & (sec[i:j] < PARAMS["exit"])) + i
-                target[trade] = side
-            history.append(rng)
+        if pd.Timestamp(sessions[i]).weekday() == 2:
+            obs = np.flatnonzero((sec[i:j] >= PARAMS["observe_start"]) & (sec[i:j] < PARAMS["entry"])) + i
+            trade = np.flatnonzero((sec[i:j] >= PARAMS["entry"]) & (sec[i:j] < PARAMS["exit"])) + i
+            if len(obs) and len(trade):
+                change = closes[obs[-1]] - closes[obs[0]]
+                if abs(change) >= PARAMS["move_ticks"] / 64:
+                    target[trade] = 1 if change > 0 else -1
         i = j
-    out["NQ"] = target
+    out["ZN"] = target
     return out
 
 
