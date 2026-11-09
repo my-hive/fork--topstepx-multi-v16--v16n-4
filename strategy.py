@@ -1,25 +1,17 @@
-"""Energy crack spread: fade extreme completed daily RB/CL return divergence."""
+"""Soybean oil weekly reversal, RTH-only to avoid overnight gap churn."""
 import numpy as np
-import pandas as pd
-
-FAMILY = "energy-crack-spread-reversion"
-PARAMS = {"lookback": 20, "entry_z": 1.5, "start": 34200, "end": 53400, "stop_ticks": 20}
-TICK_VALUE = {"CL": 10.0, "RB": 4.2}
+FAMILY = "grain-soyoil-weekly-reversal"
+PARAMS = {"lookback": 5, "start": 30600, "end": 52200, "stop_ticks": 16}
+TICK_VALUE = 6.0
 
 def signals(panel):
-    out = {s: np.zeros(len(d), dtype=np.int64) for s, d in panel.items()}
-    if not {"CL", "RB"}.issubset(panel):
-        return out
-    c, r = panel["CL"], panel["RB"]
-    cd = c.close.groupby(c.session.astype(str)).agg(['first', 'last'])
-    rd = r.close.groupby(r.session.astype(str)).agg(['first', 'last'])
-    crack = (rd['last'] / rd['first'] - 1).sub(cd['last'] / cd['first'] - 1)
-    z = ((crack - crack.rolling(PARAMS['lookback']).mean()) / crack.rolling(PARAMS['lookback']).std()).shift(1)
-    side = z.reindex(c.session.astype(str)).fillna(0).to_numpy()
-    live = (c.ct_sec.to_numpy() >= PARAMS['start']) & (c.ct_sec.to_numpy() < PARAMS['end'])
-    out['CL'] = (np.sign(side) * live).astype(np.int64)
-    out['RB'] = (-np.sign(side) * live).astype(np.int64)
+    out = {s: np.zeros(len(d), dtype=np.int64) for s,d in panel.items()}
+    if 'ZL' not in panel: return out
+    d=panel['ZL']; daily=d.close.groupby(d.session.astype(str)).last()
+    side=-np.sign((daily/daily.shift(PARAMS['lookback'])-1).shift(1))
+    x=side.reindex(d.session.astype(str)).fillna(0).to_numpy(); sec=d.ct_sec.to_numpy()
+    out['ZL']=(x*((sec>=PARAMS['start'])&(sec<PARAMS['end']))).astype(np.int64)
     return out
 
 def entry_risk(panel):
-    return {s: np.full(len(d), PARAMS['stop_ticks'] * TICK_VALUE[s]) if s in TICK_VALUE else np.zeros(len(d)) for s,d in panel.items()}
+    return {s:np.full(len(d),PARAMS['stop_ticks']*TICK_VALUE) if s=='ZL' else np.zeros(len(d)) for s,d in panel.items()}
