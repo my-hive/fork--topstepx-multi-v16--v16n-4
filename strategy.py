@@ -1,27 +1,25 @@
-"""Causal baseline, optional symbols. No requirement to manufacture market diversity.
-Slow 20-bar momentum, entries after 10:00 CT, flat at 14:00. Not claimed profitable.
-"""
+"""Rates turn-of-month flow: long 3-month note on last calendar days, flat before settlement."""
 import numpy as np
 
-
-def entry_risk(panel):
-    return {symbol: np.zeros(len(df)) for symbol, df in panel.items()}
+FAMILY = "rates-ultra-turn-month"
+PARAMS = {"month_day": 28, "start_sec": 30000, "exit_sec": 54600, "stop_points": 0.20}
+PV = 1000.0
 
 
 def signals(panel):
+    p = PARAMS
     result = {}
     for symbol, df in panel.items():
         out = np.zeros(len(df), dtype=np.int64)
-        # Two micros only, at most 0.2 standard equivalents total.
-        if symbol not in ('MES', 'MGC'):
-            result[symbol] = out
-            continue
-        for indices in df.groupby('session', sort=False).indices.values():
-            close = df.close.to_numpy()[indices]
-            sec = df.ct_sec.to_numpy()[indices]
-            # Rolling mean excludes future rows; warmup restarts each session.
-            for j in range(20, len(indices)):
-                if 36000 <= sec[j] < 50400:
-                    out[indices[j]] = int(np.sign(close[j] - close[j-20:j].mean()))
+        if symbol == "UB":
+            sec = df.ct_sec.to_numpy()
+            day = df.index.day.to_numpy()
+            active = (day >= p["month_day"]) & (sec >= p["start_sec"]) & (sec < p["exit_sec"])
+            out[active] = 1
         result[symbol] = out
     return result
+
+
+def entry_risk(panel):
+    p = PARAMS
+    return {symbol: np.full(len(df), p["stop_points"] * PV) for symbol, df in panel.items()}
