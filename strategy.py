@@ -1,24 +1,19 @@
-"""6E London-to-New-York session handoff momentum."""
+"""RB Friday late-RTH seasonal carry: long after 10:00 CT, flat 14:50."""
 import numpy as np
+import pandas as pd
 
-FAMILY = "fx-london-ny-handoff"
-PARAMS = {"observe_start": 21600, "entry": 28800, "exit": 43200, "move": 0.0010, "stop_risk": 300}
+FAMILY = "energy-friday-rth-carry"
+PARAMS = {"entry": 36000, "exit": 53400, "weekday": 4, "stop_risk": 300}
 
 def signals(panel):
     out = {s: np.zeros(len(d), dtype=np.int64) for s, d in panel.items()}
-    if "6E" not in panel:
+    if "RB" not in panel:
         return out
-    d = panel["6E"]
-    sec = d.ct_sec.to_numpy(); close = d.close.to_numpy(); ses = d.session.astype(str).to_numpy(); target = out["6E"]
-    cuts = np.r_[0, np.flatnonzero(ses[1:] != ses[:-1]) + 1, len(d)]
-    for start, end in zip(cuts[:-1], cuts[1:]):
-        xsec = sec[start:end]
-        obs = np.flatnonzero((xsec >= PARAMS["observe_start"]) & (xsec < PARAMS["entry"])) + start
-        trade = np.flatnonzero((xsec >= PARAMS["entry"]) & (xsec < PARAMS["exit"])) + start
-        if len(obs) and len(trade):
-            move = close[obs[-1]] - close[obs[0]]
-            if abs(move) >= PARAMS["move"]:
-                target[trade] = 1 if move > 0 else -1
+    d = panel["RB"]
+    sec = d.ct_sec.to_numpy()
+    friday = pd.to_datetime(d.session.astype(str)).dt.dayofweek.to_numpy() == PARAMS["weekday"]
+    trade = friday & (sec >= PARAMS["entry"]) & (sec < PARAMS["exit"])
+    out["RB"][trade] = 1
     return out
 
 def entry_risk(panel):
